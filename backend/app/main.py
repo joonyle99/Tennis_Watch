@@ -15,6 +15,8 @@ async def lifespan(app: FastAPI):
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
     # 요청 주소에 인증키가 들어가므로 HTTP 클라이언트의 요청 로그는 남기지 않는다.
     logging.getLogger("httpx").setLevel(logging.WARNING)
+    # 작업이 돌 때마다 찍히는 스케줄러 로그는 줄이고, 수집·알림 결과만 남긴다.
+    logging.getLogger("apscheduler").setLevel(logging.WARNING)
     init_db()
     settings = get_settings()
     app.state.collector = Collector(SessionLocal)
