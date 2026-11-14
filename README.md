@@ -2,7 +2,7 @@
 
 테니스 코트 예약 오픈 일정과 접수 상태를 모니터링해 Telegram으로 알려 주는 개인용 서비스.
 
-현재 상태: Telegram 알림(Phase 4)까지 구현. 서버를 띄우면 5분마다 수집하고 알림을 보낸다. 웹 대시보드는 아직 없다.
+현재 상태: 웹 대시보드(Phase 5)까지 구현. Docker Compose 배포는 아직 없다.
 
 ## 실행
 
@@ -14,6 +14,28 @@ python -m uvicorn app.main:app --reload
 ```
 
 API 문서: http://localhost:8000/docs
+
+다른 터미널에서 대시보드를 켠다.
+
+```bash
+cd frontend
+npm install
+npm run build
+npm run start
+```
+
+대시보드: http://localhost:3000
+
+## 휴대폰에서 보기
+
+1. `.env`에 `DASHBOARD_PASSWORD=원하는비밀번호`를 넣고 백엔드를 다시 시작한다. 비밀번호가 없으면 다른 기기의 접속은 거절된다.
+2. 대시보드를 `npm run start` 대신 `npm run start:lan`으로 켠다.
+3. Mac의 주소를 확인한다: `ipconfig getifaddr en0`
+4. 같은 Wi-Fi에 연결된 휴대폰에서 `http://(Mac 주소):3000`을 연다.
+
+- 같은 Wi-Fi 안에서는 암호화되지 않은 HTTP다. 공용 Wi-Fi에서는 쓰지 않는다.
+- 집 밖에서 보려면 Mac과 휴대폰을 Tailscale 같은 사설망으로 묶는 방법이 있다(이 저장소에서 검증하지는 않았다). 공유기 포트를 인터넷에 직접 여는 것은 권하지 않는다.
+- 백엔드(8000번)는 이 컴퓨터에서만 열려 있고, 다른 기기는 대시보드(3000번)를 거쳐서만 접근한다.
 
 ```bash
 curl -X POST localhost:8000/api/sync        # 지금 한 번 수집

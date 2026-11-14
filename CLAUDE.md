@@ -11,6 +11,16 @@ python -m pytest -q
 python -m uvicorn app.main:app --reload
 ```
 
+```bash
+cd frontend
+npm install
+npx tsc --noEmit
+npm run build
+npm run dev
+```
+
+`frontend/AGENTS.md`의 안내대로, Next.js 코드를 쓰기 전에 `frontend/node_modules/next/dist/docs/`의 해당 문서를 확인한다.
+
 ## 규칙
 
 - 자동 예약과 결제는 구현하지 않는다.

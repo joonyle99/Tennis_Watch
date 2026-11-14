@@ -1,0 +1,21 @@
+@import "tailwindcss";
+
+body {
+  font-family:
+    "Pretendard", "Apple SD Gothic Neo", "Noto Sans KR", system-ui, -apple-system, "Segoe UI", sans-serif;
+  /* 한글은 어절 단위로 줄을 바꾼다 */
+  word-break: keep-all;
+  overflow-wrap: break-word;
+}
+
+input,
+select,
+textarea,
+button {
+  font: inherit;
+}
+
+:focus-visible {
+  outline: 2px solid var(--color-emerald-600);
+  outline-offset: 2px;
+}

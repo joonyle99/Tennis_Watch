@@ -133,9 +133,19 @@ class NoticeUpdate(BaseModel):
     time_band: TimeBand | None = None
 
 
+class NoticeBrief(Out):
+    id: int
+    facility_id: int | None
+    court_id: int | None
+    title: str
+    place_name: str | None
+    detail_url: str | None
+
+
 class StatusChangeOut(Out):
     id: int
     notice_id: int
+    notice: NoticeBrief
     old_status: SlotStatus | None
     new_status: SlotStatus
     old_raw_status: str | None
@@ -375,3 +385,15 @@ class TelegramChatOut(BaseModel):
     chat_id: str
     type: str | None
     name: str | None
+
+
+# ---------------------------------------------------------------- Phase 5
+
+
+class LoginIn(BaseModel):
+    password: str = Field(max_length=200)
+
+
+class AuthStatusOut(BaseModel):
+    required: bool
+    authenticated: bool

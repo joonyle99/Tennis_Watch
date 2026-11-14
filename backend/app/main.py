@@ -1,12 +1,14 @@
 import logging
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
+from fastapi.responses import JSONResponse
 
 from app.api.routes import router
 from app.config import get_settings
 from app.db import SessionLocal, init_db
 from app.scheduler.jobs import Collector, Notifier, start_scheduler
+from app.services import auth
 from app.services.telegram import TelegramClient
 
 
@@ -33,5 +35,20 @@ async def lifespan(app: FastAPI):
         app.state.scheduler.shutdown(wait=False)
 
 
-app = FastAPI(title="Tennis Watch", version="0.3.0", lifespan=lifespan)
+app = FastAPI(title="Tennis Watch", version="0.4.0", lifespan=lifespan)
+
+# 로그인 없이 열려 있는 경로. 그 밖의 /api는 DASHBOARD_PASSWORD가 있으면 세션이 필요하다.
+OPEN_PATHS = {"/api/health", "/api/auth/status", "/api/auth/login", "/api/auth/logout"}
+
+
+@app.middleware("http")
+async def require_session(request: Request, call_next):
+    password = get_settings().dashboard_password
+    path = request.url.path
+    if password and path.startswith("/api") and path not in OPEN_PATHS:
+        if not auth.token_valid(password, request.cookies.get(auth.COOKIE_NAME)):
+            return JSONResponse({"detail": "로그인이 필요합니다"}, status_code=401)
+    return await call_next(request)
+
+
 app.include_router(router)

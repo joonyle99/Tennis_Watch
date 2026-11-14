@@ -12,6 +12,9 @@ class Settings(BaseSettings):
     telegram_bot_token: str = ""
     telegram_chat_id: str = ""
 
+    # 대시보드 비밀번호. 비워 두면 접근 제한이 없다(외부에 열지 말 것).
+    dashboard_password: str = ""
+
     http_timeout_seconds: float = 15.0
     # 같은 사이트에 연속 요청할 때 두는 최소 간격
     min_request_interval_seconds: float = 2.0

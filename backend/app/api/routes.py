@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 from app.api import schemas
 from app.db import get_session
 from app.models import Court, DataSource, Facility, ReservationNotice, Site, SlotStatus
-from app.timeutil import to_kst, utcnow
+from app.timeutil import kst_datetime, to_kst, utcnow
 
 router = APIRouter(prefix="/api")
 
@@ -158,7 +158,7 @@ def list_notices(
 
 # ---------------------------------------------------------------- Phase 3: 수집 엔진
 
-from datetime import date, timedelta  # noqa: E402
+from datetime import date, time, timedelta  # noqa: E402
 
 from fastapi import Request  # noqa: E402
 
@@ -351,14 +351,19 @@ def delete_opening_rule(rule_id: int, session: Session = Depends(get_session)):
 @router.get("/openings", response_model=list[schemas.OpeningOut])
 def list_openings(
     days: int = 30,
+    start: date | None = None,
     facility_id: int | None = None,
     watched: bool = True,
     session: Session = Depends(get_session),
 ):
-    """앞으로 days일 안의 예약 오픈 예정. 기본은 관심 시설만."""
+    """예약 오픈 일정. 기본은 지금부터 days일, 관심 시설만.
+
+    start(한국 날짜)를 주면 그날 0시부터 days일을 준다. 달력처럼 지난 날짜를 포함해 볼 때 쓴다.
+    """
     if not 1 <= days <= 120:
         raise HTTPException(422, "days는 1~120이어야 합니다")
-    openings = opening_rules.upcoming_openings(session, utcnow(), days, facility_id)
+    begin = utcnow() if start is None else kst_datetime(start, time(0, 0))
+    openings = opening_rules.upcoming_openings(session, begin, days, facility_id)
     if watched:
         watched_ids = set(session.scalars(select(Facility.id).where(Facility.is_watched)).all())
         openings = [o for o in openings if o.facility_id in watched_ids]
@@ -508,3 +513,51 @@ def list_notifications(
     if type is not None:
         stmt = stmt.where(NotificationEvent.type == type)
     return session.scalars(stmt).all()
+
+
+# ---------------------------------------------------------------- Phase 5: 대시보드 접근 제한
+
+from fastapi import Response  # noqa: E402
+
+from app.config import get_settings  # noqa: E402
+from app.services import auth  # noqa: E402
+
+login_throttle = auth.LoginThrottle()
+
+
+@router.get("/auth/status", response_model=schemas.AuthStatusOut)
+def auth_status(request: Request):
+    password = get_settings().dashboard_password
+    return schemas.AuthStatusOut(
+        required=bool(password),
+        authenticated=not password or auth.token_valid(password, request.cookies.get(auth.COOKIE_NAME)),
+    )
+
+
+@router.post("/auth/login", response_model=schemas.AuthStatusOut)
+def login(body: schemas.LoginIn, request: Request, response: Response):
+    password = get_settings().dashboard_password
+    if not password:
+        return schemas.AuthStatusOut(required=False, authenticated=True)
+    if wait := login_throttle.locked_for():
+        raise HTTPException(429, f"로그인 시도가 너무 많습니다. {wait}초 후 다시 시도하세요.")
+    ok = auth.password_matches(password, body.password)
+    login_throttle.record(ok)
+    if not ok:
+        raise HTTPException(401, "비밀번호가 맞지 않습니다")
+    https = request.headers.get("x-forwarded-proto", request.url.scheme) == "https"
+    response.set_cookie(
+        auth.COOKIE_NAME,
+        auth.make_token(password),
+        max_age=auth.SESSION_SECONDS,
+        httponly=True,
+        samesite="lax",
+        secure=https,
+        path="/",
+    )
+    return schemas.AuthStatusOut(required=True, authenticated=True)
+
+
+@router.post("/auth/logout", status_code=204)
+def logout(response: Response):
+    response.delete_cookie(auth.COOKIE_NAME, path="/")
