@@ -9,7 +9,7 @@ frontend (Next.js) ──HTTP──▶ backend (FastAPI)
                                └─ models/     SQLAlchemy 모델 ─▶ SQLite 파일
 ```
 
-Phase 3까지 구현되어 있다. 알림 발송(`services/telegram.py`)과 프런트엔드는 아직 없다.
+Phase 4까지 구현되어 있다. 프런트엔드는 아직 없다.
 
 ## 계층별 책임
 
@@ -113,6 +113,32 @@ Collector.run
 - 수동 `DAYS_BEFORE_USE` 규칙은 자동 규칙과 비교해 `VERIFIED` 또는 `CONFLICT`로 표시한다.
 - 수동 `MONTHLY` 규칙은 새 공고가 올라올 때 실제 접수 시작 일시와 대조한다. 맞으면 `VERIFIED`, 맞는 규칙이 없으면 날짜가 가장 가까운 규칙을 `CONFLICT`로 표시한다.
 - `services/opening_rules.upcoming_openings`가 규칙에서 앞으로의 오픈 시각을 계산한다. 롤링 규칙은 관심 조건(날짜·요일)이 있으면 그 이용일이 열리는 날만 남긴다.
+
+## 알림
+
+`services/notifier.run_notifications`가 30초마다, 그리고 수집 직후에 실행된다.
+
+```
+run_notifications
+ ├─ enqueue_changes        notifiable 상태 변경 → 오픈 확인 / 접수 재개
+ ├─ enqueue_openings       오픈 규칙에서 계산한 예정 시각 → 오픈 예정
+ ├─ enqueue_system_alerts  연속 실패, 수집 중지 → 수집 오류
+ └─ send_pending           PENDING 알림을 Telegram으로 발송
+```
+
+| 항목 | 방식 |
+|---|---|
+| 중복 방지 | `notification_events.dedupe_key` 유일 키. 상태 변경은 `change:{이력 id}`, 오픈 예정은 `opening:{시설}:{오픈 시각}:{분 전}`, 장애는 `sysfail:{사이트}:{첫 실패 로그 id}` |
+| 묶음 | 같은 시설에서 같은 시각에 열리는 오픈은 한 메시지 |
+| 오픈 예정 시점 | `opening_alert_offsets_minutes`(기본 1440, 60, 10). 매일 열리는 롤링 규칙은 1일 미만 시점만 |
+| 밀린 알림 | 보낼 시점이 여러 개 지나 있으면 가장 가까운 하나만 보내고 나머지는 `SKIPPED` |
+| 만료 | 오픈 예정은 오픈 시각, 상태 변경은 30분이 지나면 보내지 않음. 수집 오류는 만료 없음 |
+| 재시도 | 실패 시 30초부터 두 배씩(최대 10분) 간격을 두고 최대 5회. 4xx는 즉시 `FAILED` |
+| 429 | 응답의 `retry_after`만큼 기다리고, 그 차례의 나머지 발송도 멈춤. 실패 횟수에 넣지 않음 |
+| 끄기 | `notifications_enabled=false`이거나 Telegram 미설정이면 `SKIPPED`로 기록만 함 |
+| 재시작 | `PENDING` 행이 DB에 남아 있어 이어서 발송 |
+
+`services/telegram.TelegramClient`는 요청 주소에 토큰이 들어가므로 예외에 주소와 원래 예외를 싣지 않는다. `main.py`에서 `httpx` 요청 로그도 끈다.
 
 ## 시간
 

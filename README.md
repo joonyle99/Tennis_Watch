@@ -2,7 +2,7 @@
 
 테니스 코트 예약 오픈 일정과 접수 상태를 모니터링해 Telegram으로 알려 주는 개인용 서비스.
 
-현재 상태: 수집 엔진(Phase 3)까지 구현. 서버를 띄우면 5분마다 수집한다. Telegram 알림과 웹 대시보드는 아직 없다.
+현재 상태: Telegram 알림(Phase 4)까지 구현. 서버를 띄우면 5분마다 수집하고 알림을 보낸다. 웹 대시보드는 아직 없다.
 
 ## 실행
 
@@ -33,6 +33,7 @@ python -m pytest -q
 
 - [요구사항](docs/PRD.md)
 - [사이트 조사](docs/SITE_RESEARCH.md)
+- [Telegram 설정](docs/TELEGRAM_SETUP.md)
 - [아키텍처](docs/ARCHITECTURE.md)
 - [데이터베이스](docs/DATABASE.md)
 

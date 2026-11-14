@@ -337,3 +337,41 @@ class SystemStatusOut(BaseModel):
 
 class SettingsUpdate(BaseModel):
     values: dict[str, Any]
+
+
+# ---------------------------------------------------------------- Phase 4
+
+from app.models.enums import NotificationStatus, NotificationType  # noqa: E402
+
+
+class NotificationOut(Out):
+    id: int
+    type: NotificationType
+    status: NotificationStatus
+    facility_id: int | None
+    notice_id: int | None
+    message: str
+    attempts: int
+    last_error: str | None
+    expires_at: datetime | None
+    next_attempt_at: datetime | None
+    sent_at: datetime | None
+    created_at: datetime
+
+
+class TelegramStatusOut(BaseModel):
+    token_set: bool
+    chat_id_set: bool
+    notifications_enabled: bool
+
+
+class TelegramTestOut(BaseModel):
+    ok: bool
+    bot_name: str | None = None
+    error: str | None = None
+
+
+class TelegramChatOut(BaseModel):
+    chat_id: str
+    type: str | None
+    name: str | None

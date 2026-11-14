@@ -447,3 +447,64 @@ def set_manual_slot(body: schemas.SlotManualIn, session: Session = Depends(get_s
     availability.set_manual_slot_status(slot, body.status, utcnow(), body.note)
     session.commit()
     return slot
+
+
+# ---------------------------------------------------------------- Phase 4: Telegram 알림
+
+from app.models import NotificationEvent  # noqa: E402
+from app.services.telegram import TelegramClient, TelegramError  # noqa: E402
+from app.timeutil import to_kst as _to_kst  # noqa: E402
+
+
+def get_telegram(request: Request) -> TelegramClient:
+    client = getattr(request.app.state, "telegram", None)
+    if client is None:
+        raise HTTPException(503, "Telegram 클라이언트가 준비되지 않았습니다")
+    return client
+
+
+@router.get("/telegram", response_model=schemas.TelegramStatusOut)
+def telegram_status(client: TelegramClient = Depends(get_telegram), session: Session = Depends(get_session)):
+    """설정 여부만 알려 준다. 토큰과 채팅 ID 값은 내보내지 않는다."""
+    return schemas.TelegramStatusOut(
+        token_set=bool(client.token),
+        chat_id_set=bool(client.chat_id),
+        notifications_enabled=app_settings.get_setting(session, "notifications_enabled"),
+    )
+
+
+@router.post("/telegram/test", response_model=schemas.TelegramTestOut)
+def telegram_test(client: TelegramClient = Depends(get_telegram)):
+    """봇 토큰을 확인하고 테스트 메시지를 보낸다."""
+    try:
+        name = client.bot_name()
+        client.send_message(
+            f"[Tennis Watch] 연결 테스트\n\n알림이 이 채팅으로 전송됩니다.\n확인시각: {_to_kst(utcnow()):%Y-%m-%d %H:%M}"
+        )
+    except TelegramError as exc:
+        return schemas.TelegramTestOut(ok=False, error=str(exc))
+    return schemas.TelegramTestOut(ok=True, bot_name=name)
+
+
+@router.get("/telegram/chats", response_model=list[schemas.TelegramChatOut])
+def telegram_chats(client: TelegramClient = Depends(get_telegram)):
+    """봇에게 최근 메시지를 보낸 채팅. TELEGRAM_CHAT_ID에 넣을 값을 찾는 데 쓴다."""
+    try:
+        return client.recent_chats()
+    except TelegramError as exc:
+        raise HTTPException(502, str(exc)) from None
+
+
+@router.get("/notifications", response_model=list[schemas.NotificationOut])
+def list_notifications(
+    status: schemas.NotificationStatus | None = None,
+    type: schemas.NotificationType | None = None,
+    limit: int = 50,
+    session: Session = Depends(get_session),
+):
+    stmt = select(NotificationEvent).order_by(NotificationEvent.id.desc()).limit(min(limit, 200))
+    if status is not None:
+        stmt = stmt.where(NotificationEvent.status == status)
+    if type is not None:
+        stmt = stmt.where(NotificationEvent.type == type)
+    return session.scalars(stmt).all()

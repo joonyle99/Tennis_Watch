@@ -51,6 +51,6 @@
 1. 사이트 기술 검증 — 완료
 2. 백엔드 기반(FastAPI, SQLite, 모델, Adapter) — 완료
 3. 데이터 수집 엔진(자동 수집, 수동 입력, 상태 비교, 스케줄러) — 완료
-4. Telegram 알림
+4. Telegram 알림 — 완료 (설정 방법: [TELEGRAM_SETUP.md](TELEGRAM_SETUP.md))
 5. 웹 대시보드
 6. 테스트 및 배포(Docker Compose, 백업, 재시작 복구)

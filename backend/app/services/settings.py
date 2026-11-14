@@ -17,6 +17,8 @@ DEFAULTS: dict[str, object] = {
     "failure_threshold": 3,
     # 예약 오픈 알림 시점(분 전)
     "opening_alert_offsets_minutes": [1440, 60, 10],
+    # 알림 전체 켜기/끄기. 끈 동안 생긴 알림은 보내지 않고 이력에만 남긴다
+    "notifications_enabled": True,
     # 사이트 차단 등으로 수집을 멈춘 사유. None이면 수집 중
     "collection_paused_reason": None,
 }
@@ -31,6 +33,7 @@ _VALIDATORS = {
     "opening_alert_offsets_minutes": lambda v: isinstance(v, list)
     and len(v) <= 10
     and all(isinstance(x, int) and 1 <= x <= 43200 for x in v),
+    "notifications_enabled": lambda v: isinstance(v, bool),
     "collection_paused_reason": lambda v: v is None or isinstance(v, str),
 }
 
@@ -50,7 +53,8 @@ def get_all(session: Session) -> dict[str, object]:
 def set_setting(session: Session, key: str, value) -> None:
     if key not in DEFAULTS:
         raise KeyError(key)
-    if isinstance(value, bool) or not _VALIDATORS[key](value):
+    wants_bool = isinstance(DEFAULTS[key], bool)
+    if (isinstance(value, bool) and not wants_bool) or not _VALIDATORS[key](value):
         raise ValueError(f"{key}에 쓸 수 없는 값입니다: {value!r}")
     row = session.get(AppSetting, key)
     if row is None:

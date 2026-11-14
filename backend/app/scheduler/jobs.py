@@ -13,7 +13,8 @@ from app.adapters.base import SiteAdapter
 from app.adapters.registry import build_adapter
 from app.config import get_settings
 from app.models import Site
-from app.services import collector
+from app.services import collector, notifier
+from app.services.telegram import TelegramClient
 from app.services.collector import SyncResult
 from app.services.settings import get_setting
 from app.timeutil import utcnow
@@ -79,18 +80,48 @@ class Collector:
         return results
 
 
-def start_scheduler(runner: Collector) -> BackgroundScheduler:
+class Notifier:
+    """알림 생성·발송 실행기."""
+
+    def __init__(self, session_factory: sessionmaker, client: TelegramClient):
+        self.session_factory = session_factory
+        self.client = client
+        self._lock = threading.Lock()
+
+    def run(self, now: datetime | None = None) -> dict[str, int] | None:
+        if not self._lock.acquire(blocking=False):
+            return None
+        try:
+            with self.session_factory() as session:
+                return notifier.run_notifications(session, self.client, now or utcnow())
+        finally:
+            self._lock.release()
+
+
+def start_scheduler(runner: Collector, notify: Notifier | None = None) -> BackgroundScheduler:
     with runner.session_factory() as session:
         interval = get_setting(session, "sync_interval_minutes")
 
     scheduler = BackgroundScheduler(timezone="UTC")
     common = {"coalesce": True, "max_instances": 1, "misfire_grace_time": 60}
 
+    def send_notifications():
+        if notify is None:
+            return
+        try:
+            counts = notify.run()
+            if counts and any(counts.values()):
+                log.info("알림: %s", counts)
+        except Exception:
+            log.exception("알림 처리 중 예기치 않은 오류")
+
     def safe(**kwargs):
         def job():
             try:
                 for result in runner.run(**kwargs):
                     log.info("수집 결과: %s", result)
+                # 수집에서 발견한 변경을 다음 알림 주기까지 기다리지 않고 바로 보낸다.
+                send_notifications()
             except Exception:
                 # 한 번의 예외로 스케줄러가 멈추지 않게 한다.
                 log.exception("수집 중 예기치 않은 오류")
@@ -102,6 +133,8 @@ def start_scheduler(runner: Collector) -> BackgroundScheduler:
         safe(), "interval", minutes=interval, id="sync", next_run_time=utcnow() + timedelta(seconds=5), **common
     )
     scheduler.add_job(safe(hot_only=True), "interval", minutes=1, id="hot", **common)
+    # 오픈 예정 알림의 시점을 맞추고, 실패한 발송을 다시 시도한다.
+    scheduler.add_job(send_notifications, "interval", seconds=30, id="notify", **common)
     scheduler.start()
     return scheduler
 

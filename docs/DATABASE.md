@@ -70,6 +70,8 @@ reservation_notices ─▶ facilities, courts (선택)
 
 - `dedupe_key`가 같은 알림은 한 번만 만들어진다(예: `opening:{notice}:{60m}`).
 - `attempts`, `next_attempt_at`, `last_error`로 재시도를 추적한다. 재시작 후에도 `PENDING` 행에서 이어간다.
+- `expires_at`이 지난 알림은 보내지 않고 `SKIPPED`로 바꾼다.
+- `SKIPPED`의 사유(알림 꺼짐, Telegram 미설정, 시점 지남 등)는 `last_error`에 적는다.
 
 ### 시간
 
