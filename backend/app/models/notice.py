@@ -1,10 +1,11 @@
 from datetime import date, datetime, time
 
-from sqlalchemy import Boolean, Date, ForeignKey, Integer, String, Text, Time, UniqueConstraint
+from sqlalchemy import JSON, Boolean, Date, ForeignKey, Integer, String, Text, Time, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db import Base, UTCDateTime
 from app.models.enums import (
+    ChangeKind,
     DataSource,
     DayType,
     RuleType,
@@ -58,6 +59,9 @@ class ReservationNotice(Base):
     # 공고명에서 추출한 값. 표기가 시설마다 달라 확실하지 않다.
     day_type: Mapped[DayType] = mapped_column(String(10), default=DayType.UNKNOWN)
     time_band: Mapped[TimeBand] = mapped_column(String(10), default=TimeBand.UNKNOWN)
+    lighting: Mapped[bool] = mapped_column(Boolean, default=False)
+    # 사용자가 보정한 필드 이름. 자동 수집이 이 필드는 덮어쓰지 않는다.
+    locked_fields: Mapped[list[str]] = mapped_column(JSON, default=list)
 
     # 최근 목록 수집에 포함되었는지. 이용 종료된 공고는 목록에서 빠진다.
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
@@ -84,6 +88,9 @@ class NoticeStatusHistory(Base):
     new_status: Mapped[SlotStatus] = mapped_column(String(16))
     old_raw_status: Mapped[str | None] = mapped_column(String(30))
     new_raw_status: Mapped[str | None] = mapped_column(String(30))
+    kind: Mapped[ChangeKind] = mapped_column(String(10), default=ChangeKind.OTHER)
+    # 알림을 보내도 되는 변경인지. 최초 수집, 수집 실패 뒤 복구, UNKNOWN에서의 변경은 False다.
+    notifiable: Mapped[bool] = mapped_column(Boolean, default=False)
     changed_at: Mapped[datetime] = mapped_column(UTCDateTime, default=utcnow)
 
     notice: Mapped[ReservationNotice] = relationship(back_populates="status_history")

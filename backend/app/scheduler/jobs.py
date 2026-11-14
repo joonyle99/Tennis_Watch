@@ -1,0 +1,110 @@
+"""주기 수집. 업무 로직은 services에 있고, 여기서는 실행 시점과 중복 방지만 다룬다."""
+
+import logging
+import threading
+from collections.abc import Callable
+from datetime import datetime, timedelta
+
+from apscheduler.schedulers.background import BackgroundScheduler
+from sqlalchemy import select
+from sqlalchemy.orm import Session, sessionmaker
+
+from app.adapters.base import SiteAdapter
+from app.adapters.registry import build_adapter
+from app.config import get_settings
+from app.models import Site
+from app.services import collector
+from app.services.collector import SyncResult
+from app.services.settings import get_setting
+from app.timeutil import utcnow
+
+log = logging.getLogger(__name__)
+
+AdapterFactory = Callable[[str], SiteAdapter]
+
+
+class Collector:
+    """수집 실행기. 스케줄러와 수동 실행(API)이 같은 인스턴스를 쓴다."""
+
+    def __init__(self, session_factory: sessionmaker, adapter_factory: AdapterFactory | None = None):
+        self.session_factory = session_factory
+        self._adapter_factory = adapter_factory or (lambda code: build_adapter(code, get_settings()))
+        self._adapters: dict[str, SiteAdapter] = {}
+        # 수집이 겹쳐 돌지 않게 한다. 어댑터의 요청 간격 제한도 한 번에 한 실행만 가정한다.
+        self._lock = threading.Lock()
+
+    def _adapter(self, code: str) -> SiteAdapter:
+        if code not in self._adapters:
+            self._adapters[code] = self._adapter_factory(code)
+        return self._adapters[code]
+
+    def run(self, *, force: bool = False, hot_only: bool = False, now: datetime | None = None) -> list[SyncResult]:
+        """한 번 수집한다.
+
+        force: 사용자가 직접 실행한 경우. 백오프 대기를 건너뛴다(차단으로 멈춘 상태는 건너뛰지 않는다).
+        hot_only: 접수 시작 전후 구간의 공고 상세만 확인한다.
+        """
+        if not self._lock.acquire(blocking=False):
+            return [SyncResult(job="all", ok=False, skipped="이미 수집 중입니다")]
+        try:
+            with self.session_factory() as session:
+                return self._run(session, force=force, hot_only=hot_only, now=now)
+        finally:
+            self._lock.release()
+
+    def _run(self, session: Session, *, force: bool, hot_only: bool, now: datetime | None) -> list[SyncResult]:
+        results: list[SyncResult] = []
+        paused = get_setting(session, "collection_paused_reason")
+        if paused:
+            return [SyncResult(job="all", ok=False, skipped=f"수집 중지됨: {paused}")]
+
+        for site in session.scalars(select(Site).where(Site.enabled)).all():
+            current = now or utcnow()
+            adapter = self._adapter(site.code)
+            if hot_only:
+                results.append(collector.run_detail_sync(session, adapter, site, current, hot_only=True))
+                continue
+
+            until = collector.backoff_until(session, site.id, get_setting(session, "sync_interval_minutes"))
+            if not force and until is not None and current < until:
+                results.append(
+                    SyncResult(job=collector.JOB_LIST, ok=False, skipped=f"연속 실패로 {until:%H:%M} UTC까지 대기")
+                )
+                continue
+
+            listing = collector.run_list_sync(session, adapter, site, current)
+            results.append(listing)
+            if listing.ok:
+                results.append(collector.run_detail_sync(session, adapter, site, current))
+        return results
+
+
+def start_scheduler(runner: Collector) -> BackgroundScheduler:
+    with runner.session_factory() as session:
+        interval = get_setting(session, "sync_interval_minutes")
+
+    scheduler = BackgroundScheduler(timezone="UTC")
+    common = {"coalesce": True, "max_instances": 1, "misfire_grace_time": 60}
+
+    def safe(**kwargs):
+        def job():
+            try:
+                for result in runner.run(**kwargs):
+                    log.info("수집 결과: %s", result)
+            except Exception:
+                # 한 번의 예외로 스케줄러가 멈추지 않게 한다.
+                log.exception("수집 중 예기치 않은 오류")
+
+        return job
+
+    # 재시작 직후 한 번 수집해 그동안의 변화를 따라잡는다.
+    scheduler.add_job(
+        safe(), "interval", minutes=interval, id="sync", next_run_time=utcnow() + timedelta(seconds=5), **common
+    )
+    scheduler.add_job(safe(hot_only=True), "interval", minutes=1, id="hot", **common)
+    scheduler.start()
+    return scheduler
+
+
+def reschedule_sync(scheduler: BackgroundScheduler, interval_minutes: int) -> None:
+    scheduler.reschedule_job("sync", trigger="interval", minutes=interval_minutes)

@@ -30,8 +30,12 @@ reservation_notices ─▶ facilities, courts (선택)
 | `watch_rules` | 개인 관심 조건 | |
 | `notification_events` | 알림 발송 이력 | `dedupe_key` |
 | `crawl_logs` | 수집 실행 기록 | |
+| `app_settings` | 웹에서 바꾸는 설정(수집 주기, 알림 시점 등). 값은 JSON | `key` |
 
-지침의 기본 테이블 10개에 `notice_status_history`를 추가했다. 서울시 사이트에서 자동 감지할 수 있는 변화가 슬롯이 아니라 공고 단위이기 때문이다.
+지침의 기본 테이블 10개에 두 개를 추가했다.
+
+- `notice_status_history`: 서울시 사이트에서 자동 감지할 수 있는 변화가 슬롯이 아니라 공고 단위이기 때문이다. `kind`(변경 종류)와 `notifiable`(알림 대상 여부)을 함께 기록한다.
+- `app_settings`: 수집 주기와 알림 시점을 화면에서 바꿀 수 있어야 하기 때문이다. 키와 기본값은 `services/settings.py`에 있다.
 
 ## 설계 메모
 

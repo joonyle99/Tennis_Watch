@@ -2,7 +2,7 @@
 
 테니스 코트 예약 오픈 일정과 접수 상태를 모니터링해 Telegram으로 알려 주는 개인용 서비스.
 
-현재 상태: 백엔드 기반(Phase 2)까지 구현. 수집 스케줄러, 알림, 웹 대시보드는 아직 없다.
+현재 상태: 수집 엔진(Phase 3)까지 구현. 서버를 띄우면 5분마다 수집한다. Telegram 알림과 웹 대시보드는 아직 없다.
 
 ## 실행
 
@@ -14,6 +14,13 @@ python -m uvicorn app.main:app --reload
 ```
 
 API 문서: http://localhost:8000/docs
+
+```bash
+curl -X POST localhost:8000/api/sync        # 지금 한 번 수집
+curl localhost:8000/api/status              # 마지막 성공 시각, 연속 실패, 최근 로그
+curl "localhost:8000/api/notices?watched=true"
+curl "localhost:8000/api/openings?days=14"  # 앞으로의 예약 오픈
+```
 
 ## 테스트
 

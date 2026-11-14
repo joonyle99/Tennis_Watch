@@ -34,6 +34,7 @@ EXPECTED_TABLES = {
     "watch_rules",
     "notification_events",
     "crawl_logs",
+    "app_settings",
 }
 
 

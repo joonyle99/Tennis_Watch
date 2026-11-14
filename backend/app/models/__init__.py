@@ -1,4 +1,5 @@
 from app.models.enums import (
+    ChangeKind,
     DataSource,
     DayType,
     NotificationStatus,
@@ -11,9 +12,11 @@ from app.models.enums import (
 from app.models.facility import Court, Facility, Site
 from app.models.notice import NoticeStatusHistory, OpeningRule, ReservationNotice
 from app.models.slot import CourtSlot, SlotHistory
-from app.models.watch import CrawlLog, NotificationEvent, WatchRule
+from app.models.watch import AppSetting, CrawlLog, NotificationEvent, WatchRule
 
 __all__ = [
+    "AppSetting",
+    "ChangeKind",
     "Court",
     "CourtSlot",
     "CrawlLog",

@@ -112,7 +112,7 @@ def test_notice_list_filters_and_utc_output(client, session):
     ids = lambda **params: {n["external_id"] for n in client.get("/api/notices", params=params).json()}
     assert ids() == {"S1", "S3"}  # 기본은 현재 목록에 있는 공고만
     assert ids(watched=True) == {"S1"}
-    assert ids(facility_id=watched.id, active=False) == {"S2"}
+    assert ids(facility_id=watched.id, include_inactive=True) == {"S1", "S2"}
     assert ids(status="AVAILABLE") == {"S1"}
 
     notice = client.get("/api/notices", params={"status": "AVAILABLE"}).json()[0]

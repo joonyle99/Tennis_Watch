@@ -42,6 +42,15 @@ class TimeBand(StrEnum):
     UNKNOWN = "UNKNOWN"
 
 
+class ChangeKind(StrEnum):
+    """상태 변경의 종류. 알림 여부 판단의 근거다."""
+
+    INITIAL = "INITIAL"  # 최초 수집
+    OPENED = "OPENED"  # 접수 시작 전 → 예약 가능
+    REOPENED = "REOPENED"  # 예약 불가 → 예약 가능 (접수 재개, 빈 코트)
+    OTHER = "OTHER"
+
+
 class NotificationType(StrEnum):
     OPENING_SOON = "OPENING_SOON"  # 예약 오픈 예정
     OPENED = "OPENED"  # 실제 예약 오픈 확인

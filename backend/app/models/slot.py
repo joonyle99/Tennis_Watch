@@ -1,10 +1,10 @@
 from datetime import date, datetime, time
 
-from sqlalchemy import Date, ForeignKey, String, Text, Time, UniqueConstraint
+from sqlalchemy import Boolean, Date, ForeignKey, String, Text, Time, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db import Base, UTCDateTime
-from app.models.enums import DataSource, SlotStatus
+from app.models.enums import ChangeKind, DataSource, SlotStatus
 from app.timeutil import utcnow
 
 
@@ -56,6 +56,8 @@ class SlotHistory(Base):
     source: Mapped[DataSource] = mapped_column(String(10))
     old_status: Mapped[SlotStatus | None] = mapped_column(String(16))
     new_status: Mapped[SlotStatus] = mapped_column(String(16))
+    kind: Mapped[ChangeKind] = mapped_column(String(10), default=ChangeKind.OTHER)
+    notifiable: Mapped[bool] = mapped_column(Boolean, default=False)
     changed_at: Mapped[datetime] = mapped_column(UTCDateTime, default=utcnow)
 
     slot: Mapped[CourtSlot] = relationship(back_populates="history")

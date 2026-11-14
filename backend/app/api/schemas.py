@@ -1,4 +1,4 @@
-from datetime import date, datetime, time
+from datetime import UTC, date, datetime, time
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -113,3 +113,227 @@ class NoticeOut(Out):
     is_active: bool
     last_checked_at: datetime | None
     status_changed_at: datetime | None
+
+
+# ---------------------------------------------------------------- Phase 3
+
+from typing import Any  # noqa: E402
+
+from pydantic import model_validator  # noqa: E402
+
+from app.models.enums import ChangeKind, RuleType, VerificationStatus  # noqa: E402
+
+
+class NoticeUpdate(BaseModel):
+    """자동 수집된 공고의 보정. 고친 항목은 이후 수집이 덮어쓰지 않는다."""
+
+    facility_id: int | None = None
+    court_id: int | None = None
+    day_type: DayType | None = None
+    time_band: TimeBand | None = None
+
+
+class StatusChangeOut(Out):
+    id: int
+    notice_id: int
+    old_status: SlotStatus | None
+    new_status: SlotStatus
+    old_raw_status: str | None
+    new_raw_status: str | None
+    kind: ChangeKind
+    notifiable: bool
+    changed_at: datetime
+
+
+class OpeningRuleOut(Out):
+    id: int
+    facility_id: int
+    court_id: int | None
+    notice_id: int | None
+    rule_type: RuleType
+    source: DataSource
+    day_of_month: int | None
+    days_before: int | None
+    open_time: time | None
+    opens_at: datetime | None
+    target_use_start: date | None
+    target_use_end: date | None
+    target_description: str | None
+    source_url: str | None
+    verification_status: VerificationStatus
+    last_verified_at: datetime | None
+    note: str | None
+    is_active: bool
+    valid_from: datetime
+    valid_to: datetime | None
+    replaces_id: int | None
+
+
+class OpeningRuleCreate(BaseModel):
+    """수동 예약 오픈 규칙. open_time은 한국시간, opens_at은 시간대를 포함한 일시."""
+
+    facility_id: int
+    court_id: int | None = None
+    rule_type: RuleType
+    day_of_month: int | None = Field(default=None, ge=1, le=31)
+    days_before: int | None = Field(default=None, ge=0, le=365)
+    open_time: time | None = None
+    opens_at: datetime | None = None
+    target_use_start: date | None = None
+    target_use_end: date | None = None
+    target_description: str | None = None
+    source_url: str | None = None
+    note: str | None = None
+    # 관측에서 추정한 규칙이면 INFERRED로 등록한다.
+    verification_status: VerificationStatus = VerificationStatus.UNVERIFIED
+
+    @model_validator(mode="after")
+    def _aware(self):
+        if self.opens_at is not None and self.opens_at.tzinfo is None:
+            raise ValueError("opens_at에는 시간대가 있어야 합니다 (예: 2026-11-25T00:00:00+09:00)")
+        if self.opens_at is not None:
+            self.opens_at = self.opens_at.astimezone(UTC)
+        return self
+
+
+class OpeningRuleUpdate(BaseModel):
+    court_id: int | None = None
+    day_of_month: int | None = Field(default=None, ge=1, le=31)
+    days_before: int | None = Field(default=None, ge=0, le=365)
+    open_time: time | None = None
+    opens_at: datetime | None = None
+    target_use_start: date | None = None
+    target_use_end: date | None = None
+    target_description: str | None = None
+    source_url: str | None = None
+    note: str | None = None
+
+    @model_validator(mode="after")
+    def _aware(self):
+        if self.opens_at is not None and self.opens_at.tzinfo is None:
+            raise ValueError("opens_at에는 시간대가 있어야 합니다")
+        if self.opens_at is not None:
+            self.opens_at = self.opens_at.astimezone(UTC)
+        return self
+
+
+class OpeningOut(Out):
+    rule_id: int
+    facility_id: int
+    court_id: int | None
+    notice_id: int | None
+    rule_type: RuleType
+    source: DataSource
+    verification_status: VerificationStatus
+    opens_at: datetime
+    use_start: date | None
+    use_end: date | None
+    description: str | None
+
+
+class WatchRuleBase(BaseModel):
+    name: str | None = None
+    court_id: int | None = None
+    date_from: date | None = None
+    date_to: date | None = None
+    weekdays: list[int] = Field(default_factory=list, description="월요일 0 ~ 일요일 6")
+    time_from: time | None = None
+    time_to: time | None = None
+    min_consecutive_hours: int | None = Field(default=None, ge=1, le=24)
+    notify_opening: bool = True
+    notify_vacancy: bool = True
+    enabled: bool = True
+
+    @model_validator(mode="after")
+    def _ranges(self):
+        if any(d < 0 or d > 6 for d in self.weekdays):
+            raise ValueError("weekdays는 0(월)~6(일)이어야 합니다")
+        if self.date_from and self.date_to and self.date_from > self.date_to:
+            raise ValueError("date_from이 date_to보다 늦습니다")
+        if self.time_from and self.time_to and self.time_from >= self.time_to:
+            raise ValueError("time_from이 time_to보다 늦거나 같습니다")
+        return self
+
+
+class WatchRuleCreate(WatchRuleBase):
+    facility_id: int
+
+
+class WatchRuleOut(WatchRuleBase, Out):
+    id: int
+    facility_id: int
+
+
+class SlotManualIn(BaseModel):
+    """사용자가 사이트에서 직접 확인한 슬롯 상태. status를 null로 보내면 수동값을 지운다."""
+
+    facility_id: int
+    court_id: int | None = None
+    use_date: date
+    start_time: time
+    end_time: time
+    status: SlotStatus | None
+    note: str | None = None
+
+    @model_validator(mode="after")
+    def _order(self):
+        if self.start_time >= self.end_time:
+            raise ValueError("start_time이 end_time보다 늦거나 같습니다")
+        return self
+
+
+class SlotOut(Out):
+    id: int
+    facility_id: int
+    court_id: int | None
+    use_date: date
+    start_time: time
+    end_time: time
+    auto_status: SlotStatus
+    auto_checked_at: datetime | None
+    manual_status: SlotStatus | None
+    manual_updated_at: datetime | None
+    manual_note: str | None
+    has_conflict: bool
+
+
+class SyncResultOut(Out):
+    job: str
+    ok: bool
+    source: str | None
+    seen: int
+    created: int
+    changed: int
+    notifiable: int
+    error_type: str | None
+    error: str | None
+    skipped: str | None
+
+
+class CrawlLogOut(Out):
+    id: int
+    site_id: int
+    job: str
+    started_at: datetime
+    finished_at: datetime | None
+    success: bool | None
+    item_count: int | None
+    error_type: str | None
+    error_message: str | None
+
+
+class SiteStatusOut(BaseModel):
+    site: SiteOut
+    last_success_at: datetime | None
+    consecutive_failures: int
+    backoff_until: datetime | None
+
+
+class SystemStatusOut(BaseModel):
+    paused_reason: str | None
+    sites: list[SiteStatusOut]
+    recent_logs: list[CrawlLogOut]
+
+
+class SettingsUpdate(BaseModel):
+    values: dict[str, Any]
