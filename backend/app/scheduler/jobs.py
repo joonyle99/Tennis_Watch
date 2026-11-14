@@ -76,7 +76,8 @@ class Collector:
             listing = collector.run_list_sync(session, adapter, site, current)
             results.append(listing)
             if listing.ok:
-                results.append(collector.run_detail_sync(session, adapter, site, current))
+                # 목록 수집에 걸린 시간만큼 지났으므로 시각을 다시 읽는다.
+                results.append(collector.run_detail_sync(session, adapter, site, now or utcnow()))
         return results
 
 

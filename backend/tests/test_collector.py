@@ -705,3 +705,15 @@ def test_state_survives_restart_and_detection_continues(db_url, adapter):
     second.dispose()
 
     assert (results[0].created, results[0].changed, results[0].notifiable) == (0, 1, 1)
+
+
+def test_crawl_log_records_how_long_the_run_took(session, site, monkeypatch):
+    ticks = iter([100.0, 124.4])
+    monkeypatch.setattr(collector.time_module, "monotonic", lambda: next(ticks))
+    adapter = FakeAdapter()
+    adapter.listing = [notice("S1")]
+
+    collector.run_list_sync(session, adapter, site, T0)
+
+    log = session.query(CrawlLog).one()
+    assert (log.started_at, log.finished_at) == (T0, T0 + timedelta(seconds=24))

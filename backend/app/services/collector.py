@@ -9,6 +9,7 @@
 """
 
 import logging
+import time as time_module
 from dataclasses import dataclass, field
 from datetime import datetime, time, timedelta
 
@@ -121,8 +122,9 @@ def backoff_until(session: Session, site_id: int, interval_minutes: int) -> date
     return last + timedelta(minutes=wait)
 
 
-def _finish_log(session: Session, entry: CrawlLog, result: SyncResult, now: datetime) -> None:
-    entry.finished_at = now
+def _finish_log(session: Session, entry: CrawlLog, result: SyncResult, now: datetime, started: float) -> None:
+    # now는 수집을 시작한 시각이다. 종료 시각은 실제로 걸린 시간을 더해 기록한다.
+    entry.finished_at = now + timedelta(seconds=round(time_module.monotonic() - started))
     entry.success = result.ok
     entry.item_count = result.seen
     entry.error_type = result.error_type
@@ -185,6 +187,7 @@ def run_list_sync(
     settings = settings or get_settings()
     result = SyncResult(job=JOB_LIST, ok=False)
 
+    started = time_module.monotonic()
     failures_before = consecutive_failures(session, site.id)
     entry = CrawlLog(site_id=site.id, job=JOB_LIST, started_at=now)
     session.add(entry)
@@ -202,7 +205,7 @@ def run_list_sync(
             set_setting(session, "collection_paused_reason", f"사이트 차단 감지 ({now:%Y-%m-%d %H:%M} UTC)")
         if failures_before + 1 >= get_setting(session, "failure_threshold"):
             _mark_unknown(session, site, now)
-        _finish_log(session, entry, result, now)
+        _finish_log(session, entry, result, now, started)
         return result
 
     result.source = source
@@ -247,7 +250,7 @@ def run_list_sync(
             notice.is_active = False
 
     result.ok = True
-    _finish_log(session, entry, result, now)
+    _finish_log(session, entry, result, now, started)
     return result
 
 
@@ -570,6 +573,7 @@ def run_detail_sync(
         result.skipped = "확인할 공고 없음"
         return result
 
+    started = time_module.monotonic()
     entry = CrawlLog(site_id=site.id, job=job, started_at=now)
     session.add(entry)
     session.commit()
@@ -583,7 +587,7 @@ def run_detail_sync(
             session.rollback()
             set_setting(session, "collection_paused_reason", f"사이트 차단 감지 ({now:%Y-%m-%d %H:%M} UTC)")
             result.error_type, result.error = type(exc).__name__, str(exc)
-            _finish_log(session, entry, result, now)
+            _finish_log(session, entry, result, now, started)
             return result
         except AdapterError as exc:
             # 한 건이 실패해도 그 공고의 값은 그대로 두고 다음 공고로 넘어간다.
@@ -600,7 +604,7 @@ def run_detail_sync(
     if errors:
         result.error_type = "AdapterError"
         result.error = "; ".join(errors)[:2000]
-    _finish_log(session, entry, result, now)
+    _finish_log(session, entry, result, now, started)
     return result
 
 
