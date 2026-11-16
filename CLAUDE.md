@@ -17,6 +17,11 @@ npm install
 npx tsc --noEmit
 npm run build
 npm run dev
+npm run e2e        # 화면 테스트. 가짜 수집기 서버를 스스로 띄운다
+```
+
+```bash
+docker compose up -d --build
 ```
 
 `frontend/AGENTS.md`의 안내대로, Next.js 코드를 쓰기 전에 `frontend/node_modules/next/dist/docs/`의 해당 문서를 확인한다.

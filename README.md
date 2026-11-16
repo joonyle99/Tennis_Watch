@@ -2,7 +2,16 @@
 
 테니스 코트 예약 오픈 일정과 접수 상태를 모니터링해 Telegram으로 알려 주는 개인용 서비스.
 
-현재 상태: 웹 대시보드(Phase 5)까지 구현. Docker Compose 배포는 아직 없다.
+## 빠른 실행 (Docker)
+
+```bash
+cp .env.example .env   # 인증키와 토큰 입력
+docker compose up -d --build
+```
+
+대시보드: http://localhost:3000 · 자세한 내용은 [배포와 운영](docs/DEPLOY.md)
+
+아래는 Docker 없이 터미널에서 직접 실행하는 방법이다.
 
 ## 실행
 
@@ -51,10 +60,18 @@ cd backend
 python -m pytest -q
 ```
 
+```bash
+cd frontend
+npm run e2e
+```
+
+화면 테스트는 임시 DB와 가짜 수집기를 쓴다. 실제 예약 사이트와 Telegram에는 요청하지 않는다.
+
 ## 문서
 
 - [요구사항](docs/PRD.md)
 - [사이트 조사](docs/SITE_RESEARCH.md)
+- [배포와 운영](docs/DEPLOY.md)
 - [Telegram 설정](docs/TELEGRAM_SETUP.md)
 - [아키텍처](docs/ARCHITECTURE.md)
 - [데이터베이스](docs/DATABASE.md)
