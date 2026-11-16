@@ -1,0 +1,37 @@
+# 실행: docker compose up -d --build
+# 종료: docker compose down
+# 설정은 이 폴더의 .env에서 읽는다(.env.example 참고).
+
+services:
+  backend:
+    build: ./backend
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      # 컨테이너 안의 DB 위치. 아래 volumes로 호스트의 backend/data 폴더에 저장된다.
+      DATABASE_URL: sqlite:////app/data/tennis_watch.db
+      TZ: Asia/Seoul
+    volumes:
+      - ./backend/data:/app/data
+    # 백엔드는 밖으로 열지 않는다. 대시보드만 이 주소로 접근한다.
+    expose:
+      - "8000"
+    logging: &logging
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  frontend:
+    build: ./frontend
+    restart: unless-stopped
+    environment:
+      BACKEND_URL: http://backend:8000
+    depends_on:
+      backend:
+        condition: service_healthy
+    ports:
+      # 기본은 이 컴퓨터에서만 연다. 휴대폰 등 다른 기기에서 보려면 .env에
+      # DASHBOARD_BIND=0.0.0.0 과 DASHBOARD_PASSWORD를 함께 설정한다.
+      - "${DASHBOARD_BIND:-127.0.0.1}:${DASHBOARD_PORT:-3000}:3000"
+    logging: *logging

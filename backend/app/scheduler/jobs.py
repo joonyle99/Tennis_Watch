@@ -14,6 +14,7 @@ from app.adapters.registry import build_adapter
 from app.config import get_settings
 from app.models import Site
 from app.services import collector, notifier
+from app.services.backup import backup_database
 from app.services.telegram import TelegramClient
 from app.services.collector import SyncResult
 from app.services.settings import get_setting
@@ -134,6 +135,14 @@ def start_scheduler(runner: Collector, notify: Notifier | None = None) -> Backgr
         safe(), "interval", minutes=interval, id="sync", next_run_time=utcnow() + timedelta(seconds=5), **common
     )
     scheduler.add_job(safe(hot_only=True), "interval", minutes=1, id="hot", **common)
+    def backup():
+        try:
+            backup_database(get_settings().database_url)
+        except Exception:
+            log.exception("백업 실패")
+
+    # 매일 새벽 4시(한국시간)에 DB를 백업한다. 최근 14개를 남긴다.
+    scheduler.add_job(backup, "cron", hour=19, minute=0, id="backup", **common)
     # 오픈 예정 알림의 시점을 맞추고, 실패한 발송을 다시 시도한다.
     scheduler.add_job(send_notifications, "interval", seconds=30, id="notify", **common)
     scheduler.start()
